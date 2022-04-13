@@ -46,7 +46,7 @@ if(is.data.frame(data)==FALSE){
   if(vertical == 2 | vertical == 3){
     if('vertical.speed' %in% names(temp_out)==FALSE){
       warning("Vertical information not available in data, proceeding without vertical component")
-      vertical == 1
+      vertical = 1
     }else{
       data$height=temp_out$vertical.distance
       data$vert_speed=temp_out$vertical.speed
