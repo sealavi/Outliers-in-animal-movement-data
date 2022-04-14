@@ -175,7 +175,7 @@ if(is.data.frame(data)==FALSE){
   message("Data annotated with outlier information and stored in global environment as a list named Outlier_data")  
 }
 
-plot.anomaly=function(data, coords){
+plot_anomaly=function(data, coords){
   ###Create interactive plot of outliers
   ###data must be a dataframe
   #coords must be a vector of column numbers for longitude and latitude respectively
