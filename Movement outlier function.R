@@ -15,10 +15,11 @@ Anomaly_detect=function(data,confidence=.995, vertical=1, ID){
   }
   
   ##load required packages if not already loaded
-  suppressMessages(require("solitude"))
+  suppressMessages(require("ctmm"))
   suppressMessages(require("forcats"))
   suppressMessages(require("lubridate"))
-
+  suppressMessages(require("solitude"))
+  
   
   data=data
   if(exists("ID")==FALSE){
@@ -32,13 +33,18 @@ if(is.data.frame(data)==FALSE){
   if(lubridate::is.POSIXct(data$timestamp)==FALSE){
     stop("Timestamps must be a POSIXct object")
   }
-  if(all(diff((data$timestamp)) > 0)==FALSE){
-    stop("Timestamps may be out of order, please ensure that timestamps are in ascending order")
-  }
+
   
   #utilize ctmm to estimate speed and distance metrics that are tailored for outlier detection and that account for telemetry error and timestamp truncation
-  temp=ctmm::as.telemetry(data)
-  temp_out=ctmm::outlie(temp, plot = FALSE)
+  message("Estimating speed and distance components")
+  temp=suppressMessages(ctmm::as.telemetry(data))
+  temp_out=c()
+  for(i in 1:length(temp)){
+    tempout=suppressMessages(ctmm::outlie(temp[[i]], plot = FALSE))
+    temp_out[i]=list(data.frame(tempout))
+  }
+  temp_out=do.call(rbind,temp_out)
+  
   data$speeds=temp_out$speed
   data$distance=temp_out$distance
   
@@ -58,7 +64,13 @@ if(is.data.frame(data)==FALSE){
   splitdata=split(data, data[,ID])
   
   #Begin anomaly detection
+  message("Initiating anomaly detection")
+  pb = txtProgressBar(min = 0, max = length(splitdata),  style = 3, char="=") 
   for(i in 1:length(splitdata)){
+    
+    if(all(diff((splitdata[[i]]$timestamp)) > 0)==FALSE){
+      stop("Timestamps may be out of order, please ensure that timestamps are in ascending order")
+    }
     
     if(vertical == 3){
       indexs=which(complete.cases(splitdata[[i]]$height,splitdata[[i]]$vert_speed,splitdata[[i]]$speeds,splitdata[[i]]$distance)==TRUE)
@@ -66,7 +78,7 @@ if(is.data.frame(data)==FALSE){
       COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
       subset=splitdata[[i]][indexs,COLS]
       iforest = isolationForest$new()
-      iforest$fit(subset)
+      invisible(capture.output(iforest$fit(subset)))
       scores =iforest$predict(subset)
       splitdata[[i]]$overall_anomaly_score=NA
       splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
@@ -76,7 +88,7 @@ if(is.data.frame(data)==FALSE){
       COLS_HAE=which(names(splitdata[[i]])%in%COLS_HAE==TRUE)
       subset_HAE=splitdata[[i]][indexs_HAE,COLS_HAE]
       iforest_HAE = isolationForest$new()
-      iforest_HAE$fit(subset_HAE)
+      invisible(capture.output(iforest_HAE$fit(subset_HAE)))
       scores_HAE =iforest_HAE$predict(subset_HAE)
       splitdata[[i]]$anomaly_score_vertical=NA
       splitdata[[i]]$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
@@ -89,7 +101,7 @@ if(is.data.frame(data)==FALSE){
       COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
       subset=splitdata[[i]][indexs,COLS]
       iforest = isolationForest$new()
-      iforest$fit(subset)
+      invisible(capture.output(iforest$fit(subset)))
       scores =iforest$predict(subset)
       splitdata[[i]]$overall_anomaly_score=NA
       splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
@@ -99,7 +111,7 @@ if(is.data.frame(data)==FALSE){
       COLS_HAE=which(names(splitdata[[i]])%in%COLS==TRUE)
       subset_HAE=splitdata[[i]][indexs_HAE,COLS_HAE]
       iforest_HAE = isolationForest$new()
-      iforest_HAE$fit(subset_HAE)
+      invisible(capture.output(iforest_HAE$fit(subset_HAE)))
       scores_HAE =iforest_HAE$predict(subset_HAE)
       splitdata[[i]]$anomaly_score_vertical=NA
       splitdata[[i]]$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
@@ -112,7 +124,7 @@ if(is.data.frame(data)==FALSE){
       COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
       subset=splitdata[[i]][indexs,COLS]
       iforest = isolationForest$new()
-      iforest$fit(subset)
+      invisible(capture.output(iforest$fit(subset)))
       scores =iforest$predict(subset)
       splitdata[[i]]$overall_anomaly_score=NA
       splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
@@ -123,7 +135,7 @@ if(is.data.frame(data)==FALSE){
     indexs_DFH=which(complete.cases(splitdata[[i]]$distance)==TRUE)
     subset_DFH=as.data.frame(splitdata[[i]]$distance[indexs_DFH])
     iforest_DFH = isolationForest$new()
-    iforest_DFH$fit(subset_DFH)
+    invisible(capture.output(iforest_DFH$fit(subset_DFH)))
     scores_DFH =iforest_DFH$predict(subset_DFH)
     splitdata[[i]]$anomaly_score_distance=NA
     splitdata[[i]]$anomaly_score_distance[indexs_DFH]=scores_DFH$anomaly_score
@@ -133,7 +145,7 @@ if(is.data.frame(data)==FALSE){
     indexs_speed=which(complete.cases(splitdata[[i]]$speeds)==TRUE)
     subset_speed=as.data.frame(splitdata[[i]]$speeds[indexs_speed])
     iforest_speed = isolationForest$new()
-    iforest_speed$fit(subset_speed)
+    invisible(capture.output(iforest_speed$fit(subset_speed)))
     scores_speed =iforest_speed$predict(subset_speed)
     splitdata[[i]]$anomaly_score_speed=NA
     splitdata[[i]]$anomaly_score_speed[indexs_speed]=scores_speed$anomaly_score
@@ -168,12 +180,14 @@ if(is.data.frame(data)==FALSE){
     if(vertical == 1){
       splitdata[[i]]$Outliers_plot_lable <- fct_relevel(splitdata[[i]]$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance")
     }
-    
+    setTxtProgressBar(pb,i)
   }
- 
+  close(pb)
+  
   assign("Outlier_data",splitdata, envir = parent.frame())
   message("Data annotated with outlier information and stored in global environment as a list named Outlier_data")  
 }
+
 
 plot_anomaly=function(data, coords){
   ###Create interactive plot of outliers
@@ -241,7 +255,7 @@ plot_anomaly=function(data, coords){
     return(p1)
   }else{
     colnames(data)[c(ncol(data)-1,ncol(data))]=c("X","Y")
-    COLS=c("INDEX","distance","speeds","overall_anomaly_score", "anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers2")
+    COLS=c("INDEX","distance","speeds","overall_anomaly_score", "anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers_plot_lable")
     COLS=which(names(data)%in%COLS==TRUE)
     colnames(data)[COLS]=c("Speed","Distance","Overall Anomaly Score","Distance anomaly score", "Speed anomaly score", "Outlier detection","Outlier assessment","Row number")
     Anomalies=ggplot(data,
@@ -252,8 +266,7 @@ plot_anomaly=function(data, coords){
                          label3 = `Distance anomaly score`,
                          label4 = `Speed anomaly score`,
                          label5 = Distance, 
-                         label6 = Speed, 
-                         label7 = Height))+ 
+                         label6 = Speed))+ 
       geom_path(aes(group=1),
                 size = 0.3,
                 alpha = 0.5,
@@ -314,9 +327,9 @@ zoom_anomaly=function(data,coords, Outlier ){
   
   if("height"%in%names(data)==TRUE){
     colnames(data)[c(ncol(data)-1,ncol(data))]=c("X","Y")
-    COLS=c("INDEX","height","distance","speeds","overall_anomaly_score", "anomaly_score_vertical","anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers_plot_lable")
+    COLS=c("INDEX","distance","speeds","overall_anomaly_score", "anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers_plot_lable")
     COLS=which(names(data)%in%COLS==TRUE)
-    colnames(data)[COLS]=c("Speed","Distance","Height","Overall Anomaly Score", "Vertical anomaly score","Distance anomaly score", "Speed anomaly score", "Outlier detection","Outlier assessment","Row number")
+    colnames(data)[COLS]=c("Speed","Distance","Overall Anomaly Score","Distance anomaly score", "Speed anomaly score", "Outlier detection","Outlier assessment","Row number")
     Anomalies=ggplot(data[Index,],
                      aes(x=X, 
                          y=Y,
@@ -327,7 +340,7 @@ zoom_anomaly=function(data,coords, Outlier ){
                          label5 = `Vertical anomaly score`,
                          label6 = Distance, 
                          label7 = Speed, 
-                         label8 = Height))+ 
+                         label7 = Height))+ 
       geom_path(aes(group=1),
                 size = 0.3,
                 alpha = 0.5,
@@ -351,7 +364,7 @@ zoom_anomaly=function(data,coords, Outlier ){
     return(p1)
   }else{
     colnames(data)[c(ncol(data)-1,ncol(data))]=c("X","Y")
-    COLS=c("INDEX","distance","speeds","overall_anomaly_score", "anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers2")
+    COLS=c("INDEX","distance","speeds","overall_anomaly_score", "anomaly_score_distance", "anomaly_score_speed", "Outliers", "Outliers_plot_lable")
     COLS=which(names(data)%in%COLS==TRUE)
     colnames(data)[COLS]=c("Speed","Distance","Overall Anomaly Score", "Distance anomaly score", "Speed anomaly score", "Outlier detection","Outlier assessment","Row number")
     Anomalies=ggplot(data[Index,],
@@ -362,8 +375,7 @@ zoom_anomaly=function(data,coords, Outlier ){
                          label3 = `Distance anomaly score`,
                          label4 = `Speed anomaly score`,
                          label5 = Distance, 
-                         label6 = Speed, 
-                         label7 = Height))+ 
+                         label6 = Speed))+ 
       geom_path(aes(group=1),
                 size = 0.3,
                 alpha = 0.5,
