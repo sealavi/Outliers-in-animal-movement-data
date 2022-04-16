@@ -38,13 +38,8 @@ if(is.data.frame(data)==FALSE){
   #utilize ctmm to estimate speed and distance metrics that are tailored for outlier detection and that account for telemetry error and timestamp truncation
   message("Estimating speed and distance components")
   temp=suppressMessages(ctmm::as.telemetry(data))
-  temp_out=c()
-  for(i in 1:length(temp)){
-    tempout=suppressMessages(ctmm::outlie(temp[[i]], plot = FALSE))
-    temp_out[i]=list(data.frame(tempout))
-  }
-  temp_out=do.call(rbind,temp_out)
-  
+  temp_out=suppressMessages(ctmm::outlie(temp, plot = FALSE))
+
   data$speeds=temp_out$speed
   data$distance=temp_out$distance
   
@@ -61,130 +56,122 @@ if(is.data.frame(data)==FALSE){
   } 
   
   
-  splitdata=split(data, data[,ID])
-  
   #Begin anomaly detection
   message("Initiating anomaly detection")
-  pb = txtProgressBar(min = 0, max = length(splitdata),  style = 3, char="=") 
-  for(i in 1:length(splitdata)){
-    
-    if(all(diff((splitdata[[i]]$timestamp)) > 0)==FALSE){
-      stop("Timestamps may be out of order, please ensure that timestamps are in ascending order")
-    }
-    
-    if(vertical == 3){
-      indexs=which(complete.cases(splitdata[[i]]$height,splitdata[[i]]$vert_speed,splitdata[[i]]$speeds,splitdata[[i]]$distance)==TRUE)
-      COLS=c("height","vert_speed","speeds","distance")
-      COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
-      subset=splitdata[[i]][indexs,COLS]
-      iforest = isolationForest$new()
-      invisible(capture.output(iforest$fit(subset)))
-      scores =iforest$predict(subset)
-      splitdata[[i]]$overall_anomaly_score=NA
-      splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
-      
-      indexs_HAE=which(complete.cases(splitdata[[i]]$height,splitdata[[i]]$vert_speed)==TRUE)
-      COLS_HAE=c("height","vert_speed")
-      COLS_HAE=which(names(splitdata[[i]])%in%COLS_HAE==TRUE)
-      subset_HAE=splitdata[[i]][indexs_HAE,COLS_HAE]
-      iforest_HAE = isolationForest$new()
-      invisible(capture.output(iforest_HAE$fit(subset_HAE)))
-      scores_HAE =iforest_HAE$predict(subset_HAE)
-      splitdata[[i]]$anomaly_score_vertical=NA
-      splitdata[[i]]$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
-      
-    }
-
-    if(vertical == 2){
-      indexs=which(complete.cases(splitdata[[i]]$height,splitdata[[i]]$speeds,splitdata[[i]]$distance)==TRUE)
-      COLS=c("height","speeds","distance")
-      COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
-      subset=splitdata[[i]][indexs,COLS]
-      iforest = isolationForest$new()
-      invisible(capture.output(iforest$fit(subset)))
-      scores =iforest$predict(subset)
-      splitdata[[i]]$overall_anomaly_score=NA
-      splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
-      
-      indexs_HAE=which(complete.cases(splitdata[[i]]$height)==TRUE)
-      COLS_HAE=c("height")
-      COLS_HAE=which(names(splitdata[[i]])%in%COLS==TRUE)
-      subset_HAE=splitdata[[i]][indexs_HAE,COLS_HAE]
-      iforest_HAE = isolationForest$new()
-      invisible(capture.output(iforest_HAE$fit(subset_HAE)))
-      scores_HAE =iforest_HAE$predict(subset_HAE)
-      splitdata[[i]]$anomaly_score_vertical=NA
-      splitdata[[i]]$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
-      
-    }
-    
-    if(vertical == 1){
-      indexs=which(complete.cases(splitdata[[i]]$speeds,splitdata[[i]]$distance)==TRUE)
-      COLS=c("speeds","distance")
-      COLS=which(names(splitdata[[i]])%in%COLS==TRUE)
-      subset=splitdata[[i]][indexs,COLS]
-      iforest = isolationForest$new()
-      invisible(capture.output(iforest$fit(subset)))
-      scores =iforest$predict(subset)
-      splitdata[[i]]$overall_anomaly_score=NA
-      splitdata[[i]]$overall_anomaly_score[indexs]=scores$anomaly_score
-      
-    }
-    
-
-    indexs_DFH=which(complete.cases(splitdata[[i]]$distance)==TRUE)
-    subset_DFH=as.data.frame(splitdata[[i]]$distance[indexs_DFH])
-    iforest_DFH = isolationForest$new()
-    invisible(capture.output(iforest_DFH$fit(subset_DFH)))
-    scores_DFH =iforest_DFH$predict(subset_DFH)
-    splitdata[[i]]$anomaly_score_distance=NA
-    splitdata[[i]]$anomaly_score_distance[indexs_DFH]=scores_DFH$anomaly_score
-    
-    
-    
-    indexs_speed=which(complete.cases(splitdata[[i]]$speeds)==TRUE)
-    subset_speed=as.data.frame(splitdata[[i]]$speeds[indexs_speed])
-    iforest_speed = isolationForest$new()
-    invisible(capture.output(iforest_speed$fit(subset_speed)))
-    scores_speed =iforest_speed$predict(subset_speed)
-    splitdata[[i]]$anomaly_score_speed=NA
-    splitdata[[i]]$anomaly_score_speed[indexs_speed]=scores_speed$anomaly_score
-    
-    overall_outliers=which(splitdata[[i]]$overall_anomaly_score>=as.numeric(quantile(na.omit(splitdata[[i]]$overall_anomaly_score), confidence)))
-    speed_outliers=which(splitdata[[i]]$anomaly_score_speed>=as.numeric(quantile(na.omit(splitdata[[i]]$anomaly_score_speed), confidence)))
-    distance_outliers=which(splitdata[[i]]$anomaly_score_distance>=as.numeric(quantile(na.omit(splitdata[[i]]$anomaly_score_distance), confidence)))
-
-    distance_outliers=distance_outliers[-which(distance_outliers%in%overall_outliers==TRUE)]
-    speed_outliers=speed_outliers[-which(speed_outliers%in%overall_outliers==TRUE)]
-    
-    splitdata[[i]]$Outliers="Not anomalous"
-    splitdata[[i]]$Outliers[speed_outliers]="Possibly anomalous speed"
-    splitdata[[i]]$Outliers[distance_outliers]="Possibly anomalous distance"
-    
-    if(vertical == 2 | vertical == 3){
-      vertical_outliers=which(splitdata[[i]]$anomaly_score_vertical>=as.numeric(quantile(na.omit(splitdata[[i]]$anomaly_score_vertical), confidence)))
-      vertical_outliers=vertical_outliers[-which(vertical_outliers%in%overall_outliers==TRUE)]
-      splitdata[[i]]$Outliers[vertical_outliers]="Possibly vertical anomaly"
-      
-    }
-    
-    splitdata[[i]]$Outliers[overall_outliers]="Unanimous outlier"
-    
-    
-    splitdata[[i]]$Outliers_plot_lable <- ifelse(splitdata[[i]]$Outliers == "Not anomalous", NA_character_, splitdata[[i]]$Outliers)
-    
-    if(vertical == 2 | vertical == 3){
-      splitdata[[i]]$Outliers_plot_lable <- fct_relevel(splitdata[[i]]$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance" ,"Possibly vertical anomaly")
-    }
-    
-    if(vertical == 1){
-      splitdata[[i]]$Outliers_plot_lable <- fct_relevel(splitdata[[i]]$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance")
-    }
-    setTxtProgressBar(pb,i)
+  if(all(diff((data$timestamp)) > 0)==FALSE){
+    stop("Timestamps may be out of order, please ensure that timestamps are in ascending order")
   }
-  close(pb)
   
-  assign("Outlier_data",splitdata, envir = parent.frame())
+  if(vertical == 3){
+    indexs=which(complete.cases(data$height,data$vert_speed,data$speeds,data$distance)==TRUE)
+    COLS=c("height","vert_speed","speeds","distance")
+    COLS=which(names(data)%in%COLS==TRUE)
+    subset=data[indexs,COLS]
+    iforest = isolationForest$new()
+    invisible(capture.output(iforest$fit(subset)))
+    scores =iforest$predict(subset)
+    data$overall_anomaly_score=NA
+    data$overall_anomaly_score[indexs]=scores$anomaly_score
+    
+    indexs_HAE=which(complete.cases(data$height,data$vert_speed)==TRUE)
+    COLS_HAE=c("height","vert_speed")
+    COLS_HAE=which(names(data)%in%COLS_HAE==TRUE)
+    subset_HAE=data[indexs_HAE,COLS_HAE]
+    iforest_HAE = isolationForest$new()
+    invisible(capture.output(iforest_HAE$fit(subset_HAE)))
+    scores_HAE =iforest_HAE$predict(subset_HAE)
+    data$anomaly_score_vertical=NA
+    data$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
+    
+  }
+  
+  if(vertical == 2){
+    indexs=which(complete.cases(data$height,data$speeds,data$distance)==TRUE)
+    COLS=c("height","speeds","distance")
+    COLS=which(names(data)%in%COLS==TRUE)
+    subset=data[indexs,COLS]
+    iforest = isolationForest$new()
+    invisible(capture.output(iforest$fit(subset)))
+    scores =iforest$predict(subset)
+    data$overall_anomaly_score=NA
+    data$overall_anomaly_score[indexs]=scores$anomaly_score
+    
+    indexs_HAE=which(complete.cases(data$height)==TRUE)
+    COLS_HAE=c("height")
+    COLS_HAE=which(names(data)%in%COLS==TRUE)
+    subset_HAE=data[indexs_HAE,COLS_HAE]
+    iforest_HAE = isolationForest$new()
+    invisible(capture.output(iforest_HAE$fit(subset_HAE)))
+    scores_HAE =iforest_HAE$predict(subset_HAE)
+    data$anomaly_score_vertical=NA
+    data$anomaly_score_vertical[indexs_HAE]=scores_HAE$anomaly_score
+    
+  }
+  
+  if(vertical == 1){
+    indexs=which(complete.cases(data$speeds,data$distance)==TRUE)
+    COLS=c("speeds","distance")
+    COLS=which(names(data)%in%COLS==TRUE)
+    subset=data[indexs,COLS]
+    iforest = isolationForest$new()
+    invisible(capture.output(iforest$fit(subset)))
+    scores =iforest$predict(subset)
+    data$overall_anomaly_score=NA
+    data$overall_anomaly_score[indexs]=scores$anomaly_score
+    
+  }
+  
+  
+  indexs_DFH=which(complete.cases(data$distance)==TRUE)
+  subset_DFH=as.data.frame(data$distance[indexs_DFH])
+  iforest_DFH = isolationForest$new()
+  invisible(capture.output(iforest_DFH$fit(subset_DFH)))
+  scores_DFH =iforest_DFH$predict(subset_DFH)
+  data$anomaly_score_distance=NA
+  data$anomaly_score_distance[indexs_DFH]=scores_DFH$anomaly_score
+  
+  
+  
+  indexs_speed=which(complete.cases(data$speeds)==TRUE)
+  subset_speed=as.data.frame(data$speeds[indexs_speed])
+  iforest_speed = isolationForest$new()
+  invisible(capture.output(iforest_speed$fit(subset_speed)))
+  scores_speed =iforest_speed$predict(subset_speed)
+  data$anomaly_score_speed=NA
+  data$anomaly_score_speed[indexs_speed]=scores_speed$anomaly_score
+  
+  overall_outliers=which(data$overall_anomaly_score>=as.numeric(quantile(na.omit(data$overall_anomaly_score), confidence)))
+  speed_outliers=which(data$anomaly_score_speed>=as.numeric(quantile(na.omit(data$anomaly_score_speed), confidence)))
+  distance_outliers=which(data$anomaly_score_distance>=as.numeric(quantile(na.omit(data$anomaly_score_distance), confidence)))
+  
+  distance_outliers=distance_outliers[-which(distance_outliers%in%overall_outliers==TRUE)]
+  speed_outliers=speed_outliers[-which(speed_outliers%in%overall_outliers==TRUE)]
+  
+  data$Outliers="Not anomalous"
+  data$Outliers[speed_outliers]="Possibly anomalous speed"
+  data$Outliers[distance_outliers]="Possibly anomalous distance"
+  
+  if(vertical == 2 | vertical == 3){
+    vertical_outliers=which(data$anomaly_score_vertical>=as.numeric(quantile(na.omit(data$anomaly_score_vertical), confidence)))
+    vertical_outliers=vertical_outliers[-which(vertical_outliers%in%overall_outliers==TRUE)]
+    data$Outliers[vertical_outliers]="Possibly vertical anomaly"
+    
+  }
+  
+  data$Outliers[overall_outliers]="Unanimous outlier"
+  
+  
+  data$Outliers_plot_lable <- ifelse(data$Outliers == "Not anomalous", NA_character_, data$Outliers)
+  
+  if(vertical == 2 | vertical == 3){
+    data$Outliers_plot_lable <- fct_relevel(data$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance" ,"Possibly vertical anomaly")
+  }
+  
+  if(vertical == 1){
+    data$Outliers_plot_lable <- fct_relevel(data$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance")
+  }
+  
+  assign("Outlier_data",data, envir = parent.frame())
   message("Data annotated with outlier information and stored in global environment as a list named Outlier_data")  
 }
 
