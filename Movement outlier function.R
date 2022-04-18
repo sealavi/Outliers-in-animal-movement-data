@@ -55,6 +55,12 @@ if(is.data.frame(data)==FALSE){
 
   } 
   
+  ##check if default isolation forest sample size settings need to be adjusted
+  if(nrow(data)<256){
+    sample_size=nrow(data)
+  }else{
+    sample_size=256
+  }
   
   #Begin anomaly detection
   message("Initiating anomaly detection")
@@ -67,7 +73,7 @@ if(is.data.frame(data)==FALSE){
     COLS=c("height","vert_speed","speeds","distance")
     COLS=which(names(data)%in%COLS==TRUE)
     subset=data[indexs,COLS]
-    iforest = isolationForest$new()
+    iforest = isolationForest$new(sample_size=sample_size)
     invisible(capture.output(iforest$fit(subset)))
     scores =iforest$predict(subset)
     data$overall_anomaly_score=NA
@@ -77,7 +83,7 @@ if(is.data.frame(data)==FALSE){
     COLS_HAE=c("height","vert_speed")
     COLS_HAE=which(names(data)%in%COLS_HAE==TRUE)
     subset_HAE=data[indexs_HAE,COLS_HAE]
-    iforest_HAE = isolationForest$new()
+    iforest_HAE = isolationForest$new(sample_size=sample_size)
     invisible(capture.output(iforest_HAE$fit(subset_HAE)))
     scores_HAE =iforest_HAE$predict(subset_HAE)
     data$anomaly_score_vertical=NA
@@ -90,7 +96,7 @@ if(is.data.frame(data)==FALSE){
     COLS=c("height","speeds","distance")
     COLS=which(names(data)%in%COLS==TRUE)
     subset=data[indexs,COLS]
-    iforest = isolationForest$new()
+    iforest = isolationForest$new(sample_size=sample_size)
     invisible(capture.output(iforest$fit(subset)))
     scores =iforest$predict(subset)
     data$overall_anomaly_score=NA
@@ -100,7 +106,7 @@ if(is.data.frame(data)==FALSE){
     COLS_HAE=c("height")
     COLS_HAE=which(names(data)%in%COLS==TRUE)
     subset_HAE=data[indexs_HAE,COLS_HAE]
-    iforest_HAE = isolationForest$new()
+    iforest_HAE = isolationForest$new(sample_size=sample_size)
     invisible(capture.output(iforest_HAE$fit(subset_HAE)))
     scores_HAE =iforest_HAE$predict(subset_HAE)
     data$anomaly_score_vertical=NA
@@ -113,7 +119,7 @@ if(is.data.frame(data)==FALSE){
     COLS=c("speeds","distance")
     COLS=which(names(data)%in%COLS==TRUE)
     subset=data[indexs,COLS]
-    iforest = isolationForest$new()
+    iforest = isolationForest$new(sample_size=sample_size)
     invisible(capture.output(iforest$fit(subset)))
     scores =iforest$predict(subset)
     data$overall_anomaly_score=NA
@@ -124,7 +130,7 @@ if(is.data.frame(data)==FALSE){
   
   indexs_DFH=which(complete.cases(data$distance)==TRUE)
   subset_DFH=as.data.frame(data$distance[indexs_DFH])
-  iforest_DFH = isolationForest$new()
+  iforest_DFH = isolationForest$new(sample_size=sample_size)
   invisible(capture.output(iforest_DFH$fit(subset_DFH)))
   scores_DFH =iforest_DFH$predict(subset_DFH)
   data$anomaly_score_distance=NA
@@ -134,7 +140,7 @@ if(is.data.frame(data)==FALSE){
   
   indexs_speed=which(complete.cases(data$speeds)==TRUE)
   subset_speed=as.data.frame(data$speeds[indexs_speed])
-  iforest_speed = isolationForest$new()
+  iforest_speed = isolationForest$new(sample_size=sample_size)
   invisible(capture.output(iforest_speed$fit(subset_speed)))
   scores_speed =iforest_speed$predict(subset_speed)
   data$anomaly_score_speed=NA
@@ -171,8 +177,19 @@ if(is.data.frame(data)==FALSE){
     data$Outliers_plot_lable <- fct_relevel(data$Outliers_plot_lable, "Unanimous outlier", "Possibly anomalous speed","Possibly anomalous distance")
   }
   
+  numfixes=nrow(data)
+  total_negative=length(data$Outliers[which(data$Outliers=="No")])
+  True_positive=length(which(data$Outliers=="Unanimous outlier"))
+  True_negative=length(which(data$Outliers=="Not anomalous"))
+  Soft_positive=length(which(data$Outliers!="Unanimous outlier"& data$Outliers!="Not anomalous"))
+  
+  sumanom=paste("Of", numfixes, "fixes,", True_positive, "were identified as unanimously anomalous,", Soft_positive, "were identified as one dimensional anomalies, and", True_negative, "were not anomalous", sep=" ")
+  message(sumanom)
   assign("Outlier_data",data, envir = parent.frame())
-  message("Data annotated with outlier information and stored in global environment as a list named Outlier_data")  
+  message("Data annotated with outlier information, stored in global environment as Outlier_data")  
+  
+  invisible(data)
+  
 }
 
 
